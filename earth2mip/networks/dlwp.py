@@ -16,6 +16,7 @@
 
 import datetime
 import logging
+import contextlib as ctxlib
 
 import modulus
 import numpy as np
@@ -36,10 +37,11 @@ class DLWPInference(torch.nn.Module):
     time_step = datetime.timedelta(hours=6)
     history_time_step = datetime.timedelta(hours=6)
 
-    def __init__(self, dlwp, center: np.array, scale: np.array):
+    def __init__(self, dlwp, center: np.array, scale: np.array, device: str = "cpu"):
         super().__init__()
-        self.model = dlwp.to(self.device)
+        self.model = dlwp.to(device)
         self.source = None
+        self.device_ = device
 
         self.register_buffer("center", torch.Tensor(center))
         self.register_buffer("scale", torch.Tensor(scale))
@@ -72,7 +74,7 @@ class DLWPInference(torch.nn.Module):
 
     @property
     def device(self) -> torch.device:
-        return torch.device("cuda")  # Only supports cuda
+        return torch.device(self.device_)
 
     @property
     def dtype(self) -> torch.dtype:
@@ -226,7 +228,7 @@ class _DLWPWrapper(torch.nn.Module):
         return self.prepare_output(y)
 
 
-def load(package: Package, *, pretrained=True, device="cuda"):
+def load(package: Package, *, pretrained=True, device="cpu"):
     assert pretrained  # noqa
 
     # load static datasets
@@ -241,7 +243,8 @@ def load(package: Package, *, pretrained=True, device="cuda"):
     ll_to_cs_mapfile_path = package.get("map_LL721x1440_CS64.nc")
     cs_to_ll_mapfile_path = package.get("map_CS64_LL721x1440.nc")
 
-    with torch.cuda.device(device):
+    ctx = torch.cuda.device(device) if device.startswith("cuda") else ctxlib.nullcontext()
+    with ctx:
         core_model = modulus.Module.from_checkpoint(package.get("dlwp.mdlus"))
         model = _DLWPWrapper(
             core_model,
