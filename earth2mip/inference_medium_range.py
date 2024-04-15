@@ -177,7 +177,7 @@ def run_forecast(
 
 
 def score_deterministic(
-    model: time_loop.TimeLoop, n: int, initial_times, data_source, time_mean
+    model: time_loop.TimeLoop, n: int, initial_times, data_source, time_mean, device: str = "cpu"
 ) -> xr.Dataset:
     """Compute deterministic accs and rmses
 
@@ -210,6 +210,9 @@ def score_deterministic(
                             initial_times:calendar = "proleptic_gregorian" ;
             }
     """
+    if torch.distributed.is_initialized() and device.lower() == "cpu":
+        raise RuntimeError("Distributed training unsupported when using CPU backend")
+
     if torch.distributed.is_initialized():
         rank = torch.distributed.get_rank()
         world_size = torch.distributed.get_world_size()
@@ -217,7 +220,7 @@ def score_deterministic(
     else:
         rank = 0
         world_size = 1
-        device = "cuda:0"
+        device = "cpu"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_scores(
